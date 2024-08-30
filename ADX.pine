@@ -1,0 +1,101 @@
+strategy("DMI/ADX Strategy with Trailing Stop-Loss", overlay=true)
+
+// Input parameters
+adx_length = input.int(13, title="ADX Length")
+dmi_length = input.int(13, title="DMI Length")
+adx_smooth_length = input.int(3, title="ADX Smoothing Length")
+volume_ma_length1 = input.int(39, title="Volume Moving Average Length 1")
+volume_ma_length2 = input.int(78, title="Volume Moving Average Length 2")
+dmi_threshold = input.float(25.0, title="DMI Threshold")
+adx_min = input.float(25.0, title="ADX Minimum")
+adx_max = input.float(50.0, title="ADX Maximum")
+dmi_diff_threshold = input.float(20.0, title="DMI Difference Threshold")
+// swing_high_bars = input.int(1000, title="Swing High Bars")
+// movement_multiplier = input.float(2.0, title="Movement Multiplier")
+
+
+// Calculate DMI and ADX
+
+[dmi_plus, dmi_minus, adx] = ta.dmi(dmi_length, adx_length)
+
+// Smooth ADX
+adx_smoothed = ta.sma(adx, adx_smooth_length)
+
+// Calculate moving averages of volume
+volume_ma1 = ta.sma(volume, volume_ma_length1)
+
+
+// DMI crossover conditions
+dmi_crossover_long = ta.crossover(dmi_plus, dmi_minus) and dmi_plus > dmi_threshold
+dmi_crossover_short = ta.crossover(dmi_minus, dmi_plus) and dmi_minus > dmi_threshold
+
+
+// Initialize variables to store the highest volume after crossover
+var float highest_volume = na
+var int crossover_bar = na
+
+// Update highest volume after crossover
+if (dmi_crossover_long or dmi_crossover_short)
+    crossover_bar := bar_index
+    highest_volume := volume
+else if (bar_index > crossover_bar)
+    highest_volume := math.max(highest_volume, volume)
+
+volume_condition = (volume >= highest_volume) and volume > 1.5 * (volume_ma1)
+
+
+// ADX condition
+adx_condition = adx_smoothed >= adx_min and adx_smoothed <= adx_max
+
+// DMI difference condition
+dmi_diff = math.abs(dmi_plus - dmi_minus) > dmi_diff_threshold
+
+// Time condition to ignore the first 5-minute candle
+ignore_915_candle = not (hour(time) == 9 and minute(time) == 15)
+
+// Entry conditions
+long_condition = dmi_crossover_long and volume_condition and dmi_diff and ignore_915_candle
+short_condition = dmi_crossover_short  and volume_condition and dmi_diff and ignore_915_candle
+
+// Execute trades
+if (long_condition)
+    strategy.entry("Long", strategy.long)
+
+if(short_condition)
+    strategy.entry("Short", strategy.short)
+
+// // Calculate standard deviation and ATR
+// std_dev = ta.stdev(close, 21)
+// atr_value = ta.atr(39)
+
+swing_high = ta.highest(high, 333)
+swing_low = ta.lowest(low, 333)
+
+// Exit rules
+strategy.exit("Take Profit/Stop Loss", from_entry="Long", limit=swing_high, stop=strategy.position_avg_price - 3*ta.atr(39))
+strategy.exit("Take Profit/Stop Loss", from_entry="Short", limit=swing_low, stop=strategy.position_avg_price + 3*ta.atr(39))
+
+// // Define the swing high level and the adjusted levels
+// swing_high_adj = swing_high - 0.1 * std_dev
+// swing_high_plus = swing_high + 0.1 * std_dev
+
+// // Calculate target for the second 50% position
+// target_second_half = swing_high_plus + 2 * (swing_high_plus - strategy.position_avg_price)
+
+// // Exit the first 50% position near the vicinity of the adjusted swing high
+// strategy.exit("Trail Stop 50%", from_entry="Long", qty_percent=50, stop=swing_high_adj)
+
+// // Exit the rest 50% position based on the conditions
+// if (close >= swing_high_plus)
+//     strategy.exit("Target Second Half", from_entry="Long", qty_percent=50, limit=target_second_half)
+// else
+//     strategy.exit("Stop Second Half", from_entry="Long", qty_percent=50, stop=strategy.position_avg_price - 2 * atr_value)
+
+
+// // Exit rules
+
+// strategy.exit("Take Profit/Stop Loss", from_entry="Long", limit=swing_high, loss=2*(ta.atr(39)))
+
+
+// // Plot ADX for reference
+// plot(adx_smoothed, title="ADX", color=color.red)
